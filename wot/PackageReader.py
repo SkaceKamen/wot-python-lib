@@ -107,7 +107,7 @@ class PackageReader:
 	def loadPackageList(self):
 		"""Loads paths to all avaible packages"""
 	
-		# Identify packafes
+		# Identify packages
 		pck_re = r".*\.pkg"
 		
 		# List containing paths to all packages
