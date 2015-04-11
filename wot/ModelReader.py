@@ -310,7 +310,7 @@ class Model:
 		for group in self.groups:
 			if materials:
 				file += group.getObj(name_prefix, v_index_start, normals, uv, group.getMtlName(name_prefix))
-			else
+			else:
 				file += group.getObj(name_prefix, v_index_start, normals, uv)
 			v_index_start += len(group.vertices)
 		
@@ -324,11 +324,11 @@ class Model:
 		
 	def getObjMtl(self, name_prefix="", normals=True, uv=True):
 		obj = self.getObj(name_prefix, 0, normals, uv, True)
-		mat = sefl.getMtl(name_prefix)
+		mtl = self.getMtl(name_prefix)
 		
 		return {
 			'obj': obj,
-			'mat': mat
+			'mtl': mtl
 		}
 		
 	def getMtl(self, name_prefix=""):

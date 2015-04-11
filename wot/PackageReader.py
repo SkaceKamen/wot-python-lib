@@ -2,6 +2,7 @@ import os
 import zipfile
 import re
 import json
+import shutil
 
 class PackageReader:
 	index = None
@@ -45,52 +46,52 @@ class PackageReader:
 	def loadIndex(self):
 		"""Preloads paths to all files in all packages."""
 	
-		#Load package list if neccessary
+		# Load package list if neccessary
 		if self.packages == None:
 			self.loadPackageList()
 		
-		#Reset index
+		# Reset index
 		self.index = {}
 		
-		#Check for cache
+		# Check for cache
 		if self.isIndexCache():
 			self.index = self.loadIndexCache()
 			if self.index != None:
 				return
 		
-		#Walk all packages
+		# Walk all packages
 		for name, pack in self.packages.iteritems():
 			
-			#In case some unusual symbols are present in name
+			# In case some unusual symbols are present in name
 			try:
 				pack = unicode(pack)
 			except UnicodeDecodeError:
 				self.warn("Can't decode package name " + pack)
 				continue
 			
-			#Load package info
+			# Load package info
 			zfile = zipfile.ZipFile(pack)
 			
-			#Package name
+			# Package name
 			name = name[:-4]
 
 			for file in zfile.infolist():
-				#Get path and file
+				# Get path and file
 				(dirname, filename) = os.path.split(file.filename)
 				
-				#Split path to parts
+				# Split path to parts
 				dirpath = dirname.split('/')
 				
-				#Last node is path node
+				# Last node is path node
 				node = self.index
 				
-				#Walk nodes
+				# Walk nodes
 				for part in dirpath:
 					if not part in node:
 						node[part] = {}
 					node = node[part]
 				
-				#Add file to result node
+				# Add file to result node
 				if filename in node:
 					self.warn(file.filename + " is in multiple packages")
 				else:
@@ -106,9 +107,13 @@ class PackageReader:
 	def loadPackageList(self):
 		"""Loads paths to all avaible packages"""
 	
+		# Identify packafes
 		pck_re = r".*\.pkg"
+		
+		# List containing paths to all packages
 		self.packages = {}
 		
+		# Location of packages
 		base = self.wot + "/res/packages/"
 		for pack in os.listdir(base):
 			if os.path.isfile(base + pack) and re.match(pck_re, pack):
@@ -117,18 +122,19 @@ class PackageReader:
 	def findFile(self, path):
 		"""Returns package containing specified file."""
 		
+		# If indexes aren't preloaded yet
 		if self.index == None:
 			self.loadIndex()
 			
 		(dirname, filename) = os.path.split(path)
 				
-		#Split path to parts
+		# Split path to parts
 		dirpath = dirname.split('/')
 		
-		#Last node is path node
+		# Last node is path node
 		node = self.index
 		
-		#Walk nodes
+		# Walk nodes
 		for part in dirpath:
 			#Check path part existence
 			if part not in node:
@@ -136,7 +142,7 @@ class PackageReader:
 			
 			node = node[part]
 		
-		#Check existence
+		# Check existence
 		if filename not in node:
 			return None
 		
@@ -149,7 +155,14 @@ class PackageReader:
 		return None
 	
 	def extractFile(self, package_file, result_file):
+		return self.extract(package_file, result_file)
+	
+	def extract(self, package_file, result_file):
 		"""Extracts specified file from wot package."""
+		
+		# If file is unpacked, no need to search packages
+		if os.path.exists(self.wot + "/res/" + package_file):
+			shutil.copyfile(self.wot + "/res/" + package_file, result_file)
 		
 		package = self.findFile(package_file)
 		(result_dirname, result_filename) = os.path.split(result_file)
@@ -168,18 +181,63 @@ class PackageReader:
 
 		return True
 		
-	def openFile(self, package_file, mode):
-		"""Extracts specified file from wot package."""
+	def open(self, package_file, mode):
+		"""
+			Opens specified file from wot package.
+			This handler only supports reading.
+		"""
+		
+		# If file is unpacked, no need to search packages
+		if os.path.exists(self.wot + "/res/" + package_file):
+			return open(self.wot + "/res/" + package_file, mode)
 		
 		package = self.findFile(package_file)
 		
 		if package == None:
-			return None
-			
+			raise Exception("Failed to find file '" + package_file + "'")
+	
+		# Open package
 		zfile = zipfile.ZipFile(package)
+		
+		# We need to find zfile handle to open it
 		file = self.findFileHandle(zfile, package_file)
 		
 		if file == None:
-			return None
+			raise Exception("Failed to find open '" + package_file + "'")
 		
 		return zfile.open(file, mode)
+	
+	def walk(self, path, recursive = True):
+		"""
+			Iterates specified path and returns
+			all files found in path. Currently
+			works only on packed paths.
+		"""
+	
+		# @TODO: Combine both packed and unpacked paths
+		# so you can walk contents of both at the same
+		# time
+	
+		# You can specify already found path to speed up process
+		if not isinstance(path, list):
+			package = self.findFile(path)
+		else:
+			package = path
+		
+		# Path is nonexistent
+		if package == None:
+			raise Exception("Failed to find path '" + path + "'")
+		
+		# Path is actually a file
+		if not isinstance(package, list):
+			yield "/".join(package)
+			
+		# Iter path now
+		for key,item in package.iteritems():
+			if not isinstance(item, list):
+				# Return file path
+				yield "/".join(package) + "/" + key
+			elif recursive:
+				# Iterate folder, if requested
+				for p in self.walk(item, recursive):
+					yield p
