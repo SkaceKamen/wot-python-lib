@@ -1,15 +1,47 @@
 from XmlUnpacker import XmlUnpacker
 import xml.etree.ElementTree as ET
 from struct import unpack
+import os.path
 
 class ModelReader:
 	def __init__(self):
 		pass
-	def read(self, primitives_fh, visual_fh):
 		
+	def readMaterial(self, material, node):	
+		for char in node.findall('identifier'):
+			material.ident = char.text.strip()
+			
+		for prop in node.findall("mfm"):
+			mfm = self.textures_path + prop.text.strip()
+			if os.path.isfile(mfm):
+				with open(mfm, 'r') as f:
+					xmlr = XmlUnpacker()
+					root = xmlr.read(f)
+					self.readMaterial(material, root)
+			else:
+				print "Warning: Failed to find", mfm
+		
+		for prop in node.findall("property"):
+			if prop.text.strip() == "diffuseMap":
+				material.diffuseMap = self.textures_path + prop.find("Texture").text.strip().replace(".tga", ".dds")
+			elif prop.text.strip() == "diffuseMap2":
+				material.diffuseMap2 = self.textures_path + prop.find("Texture").text.strip().replace(".tga", ".dds")
+			elif prop.text.strip() == "specularMap":
+				material.specularMap = self.textures_path + prop.find("Texture").text.strip().replace(".tga", ".dds")
+			elif prop.text.strip() == "normalMap":
+				material.normalMap = self.textures_path + prop.find("Texture").text.strip().replace(".tga", ".dds")
+			elif prop.text.strip() == "doubleSided":
+				material.doubleSided = int(prop.find("Bool").text.strip())
+			elif prop.text.strip() == "alphaReference":
+				material.alphaReference = int(prop.find("Int").text.strip())
+
+
+	def read(self, primitives_fh, visual_fh, textures_path='.'):
 		#Read visual file
 		xmlr = XmlUnpacker()
 		root = xmlr.read(visual_fh)
+		
+		self.textures_path = textures_path
 
 		visual_name_list = []
 		visual_materials = []
@@ -27,19 +59,8 @@ class ModelReader:
 				material = Material()
 				
 				#@TODO: Add compaitibility with mfm
-				for prop in item.find("material").findall("property"):
-					if prop.text.strip() == "diffuseMap":
-						material.diffuseMap = prop.find("Texture").text.strip()
-					elif prop.text.strip() == "diffuseMap2":
-						material.diffuseMap2 = prop.find("Texture").text.strip()
-					elif prop.text.strip() == "specularMap":
-						material.specularMap = prop.find("Texture").text.strip()
-					elif prop.text.strip() == "normalMap":
-						material.normalMap = prop.find("Texture").text.strip()
-					elif prop.text.strip() == "doubleSided":
-						material.doubleSided = int(prop.find("Bool").text.strip())
-					elif prop.text.strip() == "alphaReference":
-						material.alphaReference = int(prop.find("Int").text.strip())
+				for prop in item.findall("material"):
+					self.readMaterial(material, prop)
 						
 				group_materials[item.text.strip()] = material
 			visual_materials.append(group_materials)
@@ -218,7 +239,7 @@ class ModelReader:
 					vert.z = unpack('f', main.read(4))[0]
 					vert.normal = Normal(unpack('I', main.read(4))[0])
 					vert.u = unpack('f', main.read(4))[0]
-					vert.v = unpack('f', main.read(4))[0]
+					vert.v = 1 - unpack('f', main.read(4))[0]
 				
 					if stride == 32:
 						vert.t = unpack('I', main.read(4))[0]
