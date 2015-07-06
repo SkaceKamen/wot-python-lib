@@ -1,3 +1,7 @@
+import sys
+# We will be loading from parent directory, nasty hack
+sys.path.append('..')
+
 # Primary library
 import wot
 
