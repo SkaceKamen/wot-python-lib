@@ -1,6 +1,6 @@
 import zlib
 
-class ModelWriter:	
+class ModelWriter(object):	
 	def write(self, primitive, filename):
 		pass
 		
@@ -48,8 +48,10 @@ class OBJModelWriter(ModelWriter):
 		# Export all render sets as separate obejcts
 		for rindex, render_set in enumerate(primitive.renderSets):
 			for gindex, group in enumerate(render_set.groups):				
+				material = group.material
+				
 				name = "set_%d_group_%d" % (rindex, gindex)
-				material_name = "%s_material" % name
+				material_name = material.identifier if material.identifier is not None else name
 				
 				objc += "o %s\n" % name
 				
@@ -58,7 +60,6 @@ class OBJModelWriter(ModelWriter):
 					objc += "usemtl %s\n" % material_name
 					mtlc += "newmtl %s\n" % material_name
 					
-					material = group.material
 					if material.diffuseMap:
 						mtlc += "map_Kd %s\n" % self.textureCallback(material.diffuseMap, "diffuseMap")
 					if material.specularMap:

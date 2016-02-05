@@ -64,7 +64,7 @@ class ModelReader:
 				'data': None
 			}
 			
-			self.out("%s\t%X\t%X" % (section_name, section["position"], section["size"]))
+			self.out("%s position %X size %X" % (section_name, section["position"], section["size"]))
 			
 			sections[section_name] = section
 
@@ -171,38 +171,47 @@ class ModelReader:
 		self.out("== VERTICES")
 		
 		vertices = []
-		
-		while True:
-			sss = data.read(64)
-			if len(sss) != 64:
-				break
-				
-			type = str(sss).split('\x00')[0]
+
+		type = str(data.read(64)).split('\x00')[0]
+		subtype = None
+		count = unp("I", data.read(4))
+		if "BPVT" in type:
+			subtype = str(data.read(64)).split('\x00')[0]
 			count = unp("I", data.read(4))
 		
-			self.out("type %s count %d" % (type, count))
-		
-			for i in range(count):
-				vertices.append(self.readVertice(data, type)) 
+		self.out("type %s subtype %s count %d" % (type, subtype, count))
+	
+		for i in range(count):
+			vertices.append(self.readVertice(data, type, subtype)) 
 		
 		return vertices
 	
-	def readVertice(self, data, type):
+	def readVertice(self, data, type, subtype):
 		vert = Vertice()
 		
 		# Load basic info
 		vert.position = unpack("3f", data.read(12))
-		vert.normal = self.readNormal(data, type)
+		vert.normal = self.readNormal(data, type, subtype)
 		vert.uv = unpack("2f", data.read(8))
 		
 		# Decide correct type
 		stride = 24
-		if "xyznuvpc" in type or "xyznuvtb" in type:
+		
+		if subtype == "set3/xyznuviiiwwtbpc":
+			stride = 40
+		elif "xyznuviiiwwtb" in type:
+			stride = 37
+		elif "xyznuvpc" in type or "xyznuvtb" in type:
+			stide = 32
+		
+		"""
+		if ("xyznuvpc" in type and "set3" not in type) or "xyznuvtb" in type:
 			stride = 32
 		if "xyznuviiiwwtb" in type:
 			stride = 37
 		if type == 'set3/xyznuviiiwwtbpc':
 			stride = 40
+		"""
 		
 		# Unpack remaining values
 		if stride == 32:
@@ -222,9 +231,9 @@ class ModelReader:
 		
 		return vert
 	
-	def readNormal(self, data, type):
+	def readNormal(self, data, type, subtype):
 		packed = unp("I", data.read(4))
-		if "set3" in type:
+		if "set3" in subtype:
 			pkz = (long(packed) >> 16) & 0xFF ^0xFF
 			pky = (long(packed) >> 8) & 0xFF ^0xFF
 			pkx = (long(packed)   ) & 0xFF ^0xFF
