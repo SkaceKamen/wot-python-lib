@@ -74,11 +74,11 @@ class PackageReader:
 			
 			# Package name
 			name = name[:-4]
-
+			
 			for file in zfile.infolist():
 				# Get path and file
 				(dirname, filename) = os.path.split(file.filename)
-				
+
 				# Split path to parts
 				dirpath = dirname.split('/')
 				
@@ -87,15 +87,15 @@ class PackageReader:
 				
 				# Walk nodes
 				for part in dirpath:
-					if not part in node:
-						node[part] = {}
-					node = node[part]
+					if not part.lower() in node:
+						node[part.lower()] = {}
+					node = node[part.lower()]
 				
 				# Add file to result node
 				if filename in node:
 					self.warn(file.filename + " is in multiple packages")
 				else:
-					node[filename] = pack
+					node[filename.lower()] = pack
 		
 		if self.cache != None:
 			self.saveIndexCache()
@@ -118,7 +118,7 @@ class PackageReader:
 		for pack in os.listdir(base):
 			if os.path.isfile(base + pack) and re.match(pck_re, pack):
 				self.packages[pack] = base + pack;
-	
+
 	def findFile(self, path):
 		"""Returns package containing specified file."""
 		
@@ -137,20 +137,21 @@ class PackageReader:
 		# Walk nodes
 		for part in dirpath:
 			#Check path part existence
-			if part not in node:
+			if part.lower() not in node:
+				#print part.lower(), "not found"
 				return None
-			
-			node = node[part]
-		
+
+			node = node[part.lower()]
+
 		# Check existence
-		if filename not in node:
+		if filename.lower() not in node:
 			return None
 		
-		return node[filename]
+		return node[filename.lower()]
 	
 	def findFileHandle(self, zfile, package_file):
 		for file in zfile.infolist():
-			if file.filename == package_file:
+			if file.filename.lower() == package_file.lower():
 				return file
 		return None
 	
@@ -169,10 +170,10 @@ class PackageReader:
 		
 		if package == None:
 			raise Exception("Failed to find file '" + package_file + "'")
-			
+		
 		zfile = zipfile.ZipFile(package)
 		file = self.findFileHandle(zfile, package_file)
-		
+
 		if file == None:
 			raise Exception("Failed to extract file '" + package_file + "'")
 		

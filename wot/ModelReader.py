@@ -2,517 +2,361 @@ from XmlUnpacker import XmlUnpacker
 import xml.etree.ElementTree as ET
 from struct import unpack
 import os.path
+import StringIO
+
+def unp(format, data):
+	return unpack(format, data)[0]
 
 class ModelReader:
 	def __init__(self):
 		pass
-		
-	def readMaterial(self, material, node):	
-		for char in node.findall('identifier'):
-			material.ident = char.text.strip()
-			
-		for prop in node.findall("mfm"):
-			mfm = self.textures_path + prop.text.strip()
-			if os.path.isfile(mfm):
-				with open(mfm, 'r') as f:
-					xmlr = XmlUnpacker()
-					root = xmlr.read(f)
-					self.readMaterial(material, root)
-			else:
-				print "Warning: Failed to find", mfm
-		
-		for prop in node.findall("property"):
-			if prop.text.strip() == "diffuseMap":
-				material.diffuseMap = self.textures_path + prop.find("Texture").text.strip().replace(".tga", ".dds")
-			elif prop.text.strip() == "diffuseMap2":
-				material.diffuseMap2 = self.textures_path + prop.find("Texture").text.strip().replace(".tga", ".dds")
-			elif prop.text.strip() == "specularMap":
-				material.specularMap = self.textures_path + prop.find("Texture").text.strip().replace(".tga", ".dds")
-			elif prop.text.strip() == "normalMap":
-				material.normalMap = self.textures_path + prop.find("Texture").text.strip().replace(".tga", ".dds")
-			elif prop.text.strip() == "doubleSided":
-				material.doubleSided = int(prop.find("Bool").text.strip())
-			elif prop.text.strip() == "alphaReference":
-				material.alphaReference = int(prop.find("Int").text.strip())
-
-
-	def read(self, primitives_fh, visual_fh, textures_path='.'):
-		#Read visual file
-		xmlr = XmlUnpacker()
-		root = xmlr.read(visual_fh)
-		
-		self.textures_path = textures_path
-
-		visual_name_list = []
-		visual_materials = []
-		
-		for set in root.findall("renderSet"):
-			geometry = set.find("geometry")
-		
-			visual_name_list.append([
-				geometry.find("vertices").text.strip(),
-				geometry.find("primitive").text.strip()
-			])
-			
-			group_materials = {}
-			for item in geometry.findall("primitiveGroup"):
-				material = Material()
-				
-				#@TODO: Add compaitibility with mfm
-				for prop in item.findall("material"):
-					self.readMaterial(material, prop)
-						
-				group_materials[item.text.strip()] = material
-			visual_materials.append(group_materials)
 	
-		#Dispose of visual file
-		xmlr = None
-		root = None
+	def read(self, primitives_fh, visual_fh):
+		# Read visual file
+		xmlr = XmlUnpacker()
+		visual = xmlr.read(visual_fh)
+
+		# Makes core short
+		f = primitives_fh
 		
-		#Start reading primitives
-		main = primitives_fh
+		# Load sections table
+		# Starts from back
+		f.seek(-4,2)
+		table_start = unp("i", f.read(4))
+		f.seek(-4-table_start, 2)
 		
-		main.seek(-4, 2)
-		table_start = unpack('i', main.read(4))[0]
-		main.seek(- 4 - table_start, 2)
-		
-		sections = {}
-		
-		has_color = False
-		has_uv2 = False
+		# Position of section starts from 4
 		position = 4
-		sub_groups = 0
-		uv2_section = ""
 		
+		print "== SECTIONS"
+		
+		# Read sections
+		sections = {}
 		while True:
-			data = main.read(4)
+			
+			# Read section size
+			data = f.read(4)
+			
 			if data == None or len(data) != 4:
 				break
 			
-			section_size = unpack('I', data)[0]
+			section_size = unp("I", data)
 			
-			#Skip dummy bytes
-			main.read(16)
-			
-			data = main.read(4)
-			if data == None or len(data) != 4:
+			# Skip bytes with unknown purpose
+			if len(f.read(16)) != 16:
 				break
 			
-			section_name_length = unpack('I', data)[0]
-			section_name = main.read(section_name_length)
-		
-			if 'vertices' in section_name:
-				sub_groups += 1
-		
-			if 'colour' in section_name:
-				has_color = True
-				
-			if 'uv2' in section_name:
-				has_uv2 = True
-				u2_section = section_name
-		
+			# Read section name
+			section_name_length = unp("I", f.read(4))
+			section_name = f.read(section_name_length)
+			
+			# Section informations
 			section = {
 				'position': position,
 				'size': section_size,
-				'name': section_name
+				'name': section_name,
+				'data': None
 			}
 			
+			print "%s\t%X\t%X" % (section_name, section["position"], section["size"])
+			
+			sections[section_name] = section
+
+			# Round to 4
 			position += section_size
 			if section_size % 4 > 0:
 				position += 4 - section_size % 4
 			
 			if section_name_length % 4 > 0:
-				main.read(4 - section_name_length % 4)
-
-			sections[section_name] = section
-			
-		sg = sub_groups - 1
-		pl_flag = False
+				f.read(4 - section_name_length % 4)
 		
-		subgroups = []
+		# Read sections data
+		for name, section in sections.iteritems():
+			f.seek(section["position"])
+			section['data'] = StringIO.StringIO(f.read(section["size"]))
 		
-		while sub_groups > 0:
-			sub_groups -= 1
-			
-			groups = []
-			subgroups.append(groups)
-			
-			name_vertices = visual_name_list[(sg - sub_groups)][0]
-			name_indicies = visual_name_list[(sg - sub_groups)][1]
-			ind_scale = 2
-			stride = 32
-			
-			if sub_groups > 0:
-				pl_flag = True
-			
-			section_vertices = sections[name_vertices]
-			section_indicies = sections[name_indicies]
-			
-			main.seek(section_indicies['position'])
-			
-			indicies_subname = ''
-			i = 0
-			while i < 64:
-				ch = main.read(1)
-				if ord(ch) == 0:
-					break
-				indicies_subname += ch
-				i += 1
-			
-			main.seek(section_indicies['position'] + 64)
-			
-			if "list32" in indicies_subname:
-				ind_scale = 4
-				
-			indicies_count = unpack("I", main.read(4))[0]
-			indicies_groups = unpack("H", main.read(2))[0]
-			
-			#print "subname", indicies_subname, "count", indicies_count, "groups", indicies_groups
-			
-			offset = indicies_count * ind_scale + 72
-			main.seek(section_indicies['position'] + offset)
-			
-			pGroups = []
-			i = 0
-			while i < indicies_groups:
-				pGroups.append({
-					'id': i,
-					'startIndex': unpack("I", main.read(4))[0],
-					'nPrimitives': unpack("I", main.read(4))[0],
-					'startVertex': unpack("I", main.read(4))[0],
-					'nVertices': unpack("I", main.read(4))[0]
-				})
-			
-				i += 1
-				
-			main.seek(section_vertices['position'])
-			
-			vertices_subname = ''
-			i = 0
-			while i < 64:
-				ch = main.read(1)
-				if ord(ch) == 0:
-					break
-				vertices_subname += ch
-				i += 1
-				
-			main.seek(section_vertices['position'] + 64)
-
-			vertices_count = unpack("I", main.read(4))[0]
-			
-			total_vertices = 0
-			for group in pGroups:
-				total_vertices += group['nVertices']
-				
-			total_polygons = 0
-			for group in pGroups:
-				total_polygons += group['nPrimitives']
-			
-			if "xyznuviiiwwtb" in vertices_subname:
-				stride = 37
-				
-			"""
-			@TODO:
-			if has_uv2:
-				get_u2(vertices_count, uv2_section)
-			"""
-			
-			big_l = indicies_groups
-			k = 0
-			i = 0
-			
-			while k < big_l:
-				index = 0
-				if not pl_flag:
-					index = k
-				
-				groups.append(pGroups[index])
-				groups[k]['position'] = section_indicies['position'] + groups[k]['startIndex'] * ind_scale + 72
-				groups[k]['vertices'] = []
-				
-				pos = groups[k]['nVertices']
-				v = 0
-				while v < pos:
-					vert = Vertice()
-					vert.x = unpack('f', main.read(4))[0]
-					vert.y = unpack('f', main.read(4))[0]
-					vert.z = unpack('f', main.read(4))[0]
-					vert.normal = Normal(unpack('I', main.read(4))[0])
-					vert.u = unpack('f', main.read(4))[0]
-					vert.v = 1 - unpack('f', main.read(4))[0]
-				
-					if stride == 32:
-						vert.t = unpack('I', main.read(4))[0]
-						vert.bn = unpack('I', main.read(4))[0]
-					else:
-						vert.index_1 = ord(main.read(1))
-						vert.index_2 = ord(main.read(1))
-						vert.index_3 = ord(main.read(1))
-						vert.weight_1 = ord(main.read(1))
-						vert.weight_2 = ord(main.read(1))
-						vert.t = unpack('I', main.read(4))[0]
-						vert.bn = unpack('I', main.read(4))[0]
-				
-					groups[k]['vertices'].append(vert)
-				
-					v += 1
-					i += 1
-			
-				k += 1
-			
+		# Read visual data
+		nodes = {}
+		nodes["Scene Root"] = self.readNode(visual.find("node"))
+		boundingBox = [
+			[ float(v) for v in visual.find("boundingBox").find("min").text.split(' ') ],
+			[ float(v) for v in visual.find("boundingBox").find("max").text.split(' ') ]
+		]
 		
-		root = Model()
-		for subgroup in subgroups:
-			materials = visual_materials[len(root.models)]
+		# Load render sets
+		sets = []
+		for render_set in visual.findall("renderSet"):
 			
-			model = Model()
-			root.models.append(model)
-			
-			for group in subgroup:
-				main.seek(group['position'])
-				
-				group['indicies'] = []
-				
-				i = 0
-				cnt = group['nPrimitives']
-				while i < cnt:			
-					p1 = None
-					p2 = None
-					p3 = None
-				
-					#print "Loaded", i, "/", cnt
-				
-					if ind_scale != 2:
-						p2 = unpack('I', main.read(4))[0]
-						p1 = unpack('I', main.read(4))[0]
-						p3 = unpack('I', main.read(4))[0]
-					else:
-						p2 = unpack('H', main.read(2))[0]
-						p1 = unpack('H', main.read(2))[0]
-						p3 = unpack('H', main.read(2))[0]
-				
-					group['indicies'].append({
-						'v1': p1,
-						'v2': p2,
-						'v3': p3
-					});
-					
-					i += 1
-				
-				grp = ModelGroup()
-				grp.id = group['id']
-				grp.vertices = group['vertices']
-				for indicie in group['indicies']:
-					grp.indicies.append(Indicie(
-						indicie['v1'] + 1 - group['startVertex'],
-						indicie['v2'] + 1 - group['startVertex'],
-						indicie['v3'] + 1 - group['startVertex'],
-					))
-				
-				if str(grp.id) in materials:
-					grp.material = materials[str(grp.id)]
-				
-				model.groups.append(grp)
-
-		return root
-
+			# Nodes - purpose unknown
+			set_nodes = [ v.text for v in render_set.findall("node") ]
 		
-class Model:
-	groups = None
-	models = None
+			# Names of sections used in this render set
+			vertices_name = render_set.find("geometry").find("vertices").text.strip()
+			indices_name = render_set.find("geometry").find("primitive").text.strip()
+			
+			# Load render set data
+			indices, groups = self.readIndices(sections[indices_name]["data"])
+			vertices = self.readVertices(sections[vertices_name]["data"])
+			
+			# Split data into groups
+			primitive_groups = []
+			for group in render_set.find("geometry").findall("primitiveGroup"):
+				material = self.readMaterial(group.find("material"))
+				origin = [ float(v) for v in group.find("groupOrigin").text.split(' ') ]
+				index = int(group.text.strip())
+				
+				i_from = groups[index]["startIndex"]
+				i_to = i_from + groups[index]["primitivesCount"]*3
+				v_from = groups[index]["startVertex"]
+				v_to = v_from + groups[index]["verticesCount"]
+				
+				print "group indices %d / %d (%d - %d)" % ((i_to - i_from), len(indices), i_from, i_to)
+				print "group vertices %d / %d (%d - %d)" % ((v_to - v_from), len(vertices), v_from, v_to)
+				
+				primitive_groups.append(PrimitiveGroup(
+					origin = origin,
+					material = material,
+					vertices = vertices[v_from:v_to],
+					indices = indices[i_from:i_to]
+				))
+			
+			# Save render set
+			sets.append(RenderSet(
+				nodes = set_nodes,
+				groups = primitive_groups
+			))
+		
+		return Primitive(
+			renderSets = sets,
+			nodes = nodes,
+			boundingBox = boundingBox
+		)
 	
-	def __init__(self):
-		self.groups = []
-		self.models = []
+	def readMaterial(self, element):
+		material = Material()
 		
-	def getObj(self, name_prefix="", v_index_start=0, normals=True, uv=True, materials=False):
-		file = ""
+		# @TODO: Material has more properties ...
+		for item in element:
+			if item.tag == "fx":
+				material.fx = item.text.strip()
+			elif item.tag == "collisionFlags":
+				material.collisionFlags = item.text.strip()
+			elif item.tag == "materialKind":
+				material.materialKind = item.text.strip()
+			elif item.tag == "identifier":
+				material.ident = item.text.strip()
+			elif item.tag == "property":
+				if item.text.strip() == "diffuseMap":
+					material.diffuseMap = item.find("Texture").text.strip().replace(".tga", ".dds")
+				elif item.text.strip() == "diffuseMap2":
+					material.diffuseMap2 = item.find("Texture").text.strip().replace(".tga", ".dds")
+				elif item.text.strip() == "specularMap":
+					material.specularMap = item.find("Texture").text.strip().replace(".tga", ".dds")
+				elif item.text.strip() == "normalMap":
+					material.normalMap = item.find("Texture").text.strip().replace(".tga", ".dds")
+				elif item.text.strip() == "doubleSided":
+					material.doubleSided = int(item.find("Bool").text.strip())
+				elif item.text.strip() == "alphaReference":
+					material.alphaReference = int(item.find("Int").text.strip())
 		
-		for group in self.groups:
-			if materials:
-				file += group.getObj(name_prefix, v_index_start, normals, uv, group.getMtlName(name_prefix))
+		return material
+	
+	def readVertices(self, data):
+		print "== VERTICES"
+		
+		vertices = []
+		
+		while True:
+			sss = data.read(64)
+			if len(sss) != 64:
+				break
+				
+			type = str(sss).split('\x00')[0]
+			count = unp("I", data.read(4))
+		
+			print "type", type, "count", count
+		
+			for i in range(count):
+				vertices.append(self.readVertice(data, type)) 
+		
+		return vertices
+	
+	def readVertice(self, data, type):
+		vert = Vertice()
+		
+		# Load basic info
+		vert.position = unpack("3f", data.read(12))
+		vert.normal = self.readNormal(data, type)
+		vert.uv = unpack("2f", data.read(8))
+		
+		# Decide correct type
+		stride = 24
+		if "xyznuvpc" in type or "xyznuvtb" in type:
+			stride = 32
+		if "xyznuviiiwwtb" in type:
+			stride = 37
+		if type == 'set3/xyznuviiiwwtbpc':
+			stride = 40
+		
+		# Unpack remaining values
+		if stride == 32:
+			vert.t = unp("I", data.read(4))
+			vert.bn = unp("I", data.read(4))
+		elif stride == 37:
+			vert.index = unpack("3B", data.read(3))
+			vert.weight = unpack("2B", data.read(2))
+			vert.t = unp("I", data.read(4))
+			vert.bn = unp("I", data.read(4))
+		elif stride == 40:
+			vert.index = unpack("3B", data.read(3))
+			vert.index2 = unpack("3B", data.read(3))
+			vert.weight = unpack("2B", data.read(2))
+			vert.t = unp("I", data.read(4))
+			vert.bn = unp("I", data.read(4))
+		
+		return vert
+	
+	def readNormal(self, data, type):
+		packed = unp("I", data.read(4))
+		if "set3" in type:
+			pkz = (long(packed) >> 16) & 0xFF ^0xFF
+			pky = (long(packed) >> 8) & 0xFF ^0xFF
+			pkx = (long(packed)   ) & 0xFF ^0xFF
+			
+			if pkx > 0x7f:
+				x = - float(pkx & 0x7f )/0x7f
 			else:
-				file += group.getObj(name_prefix, v_index_start, normals, uv)
-			v_index_start += len(group.vertices)
+				x =   float(pkx ^ 0x7f)/0x7f
+			if pky > 0x7f:
+				y = - float(pky & 0x7f)/0x7f 
+			else:
+				y =   float(pky ^ 0x7f)/0x7f
+			if pkz >0x7f:
+				z = - float(pkz & 0x7f)/0x7f
+			else:
+				z =   float(pkz ^ 0x7f)/0x7f
+			return (x,y,z)
+		else:
+			pkz = (long(packed) >> 22) & 0x3FF
+			pky = (long(packed) >> 11) & 0x7FF
+			pkx = (long(packed)) & 0x7FF
+			
+			if pkx > 0x3ff:
+				x = - float((pkx & 0x3ff ^ 0x3ff)+1)/0x3ff
+			else:
+				x = float(pkx)/0x3ff
+			if pky > 0x3ff:
+				y = - float((pky & 0x3ff ^ 0x3ff) +1)/0x3ff 
+			else:
+				y = float(pky)/0x3ff
+			if pkz >0x1ff:
+				z = - float((pkz & 0x1ff ^ 0x1ff) +1)/0x1ff
+			else:
+				z = float(pkz) / 0x1ff
+			return (x,y,z)
+	
+	def readIndices(self, data):
+		print "== INDICES"
 		
-		index = 0
-		for model in self.models:
-			file += model.getObj(name_prefix + "sub_" + str(index) + "_", v_index_start, normals, uv, materials)
-			v_index_start += model.getVericesCount()
-			index += 1
+		# Prepare informations
+		indices = []
+		groups = []
 		
-		return file
+		# Read type (ended by 0)
+		type = str(data.read(64)).split('\x00')[0]
 		
-	def getObjMtl(self, name_prefix="", normals=True, uv=True):
-		obj = self.getObj(name_prefix, 0, normals, uv, True)
-		mtl = self.getMtl(name_prefix)
+		# One indice length
+		stride = 2
+		format = "H"
 		
-		return {
-			'obj': obj,
-			'mtl': mtl
+		if type == "list32":
+			stride = 4
+			format = "I"
+		
+		# Read totals
+		count = unp("I", data.read(4))
+		groups_count = unp("I", data.read(4))
+		
+		print "groups", groups_count, "indices", count, "stride", stride, "type", type
+		
+		# Read indices
+		for i in range(count):
+			indices.append(unp(format, data.read(stride)))
+		
+		# Read groups
+		for i in range(groups_count):
+			ints = unpack("4I", data.read(16))
+			groups.append({
+				"id": i,
+				"startIndex": ints[0],
+				"primitivesCount": ints[1],
+				"startVertex": ints[2],
+				"verticesCount": ints[3]
+			})
+		
+		return (indices, groups)
+	
+	def readNode(self, element):
+		node = {
+			"transform": [ float(v) for v in element.find("transform").text.strip().split(' ') ],
+			"children": {}
 		}
 		
-	def getMtl(self, name_prefix=""):
-		file = ""
-		for group in self.groups:
-			file += group.getMtl(name_prefix)
-		
-		index = 0
-		for model in self.models:
-			file += model.getMtl(name_prefix + "sub_" + str(index) + "_")
-			index += 1
+		for child in element.findall("node"):
+			node["children"][child.find("identifier").text.strip()] = self.readNode(child)
+
+		return node
+
+class Primitive:
+	renderSets = None
+	nodes = None
+	boundingBox = None
 	
-		return file
-		
-	def getVericesCount(self):
-		count = 0
-		for group in self.groups:
-			count += len(group.vertices)
-		for model in self.models:
-			count += model.getVericesCount()
-		return count
+	def __init__(self, renderSets, nodes, boundingBox):
+		self.renderSets = renderSets
+		self.nodes = nodes
+		self.boundingBox = boundingBox
+
+class RenderSet:
+	nodes = None
+	groups = None
 	
-class ModelGroup:
-	id = None
-	vertices = None
-	indicies = None
+	def __init__(self, nodes, groups):
+		self.nodes = nodes
+		self.groups = groups
+	
+class PrimitiveGroup:
+	origin = None
 	material = None
+	vertices = None
+	indices = None
 	
-	def __init__(self):
-		self.vertices = []
-		self.indicies = []
-		self.material = None
+	def __init__(self, origin, material, vertices, indices):
+		self.origin = origin
+		self.material = material
+		self.vertices = vertices
+		self.indices = indices
 		
-	def getFaces(self):
-		faces = []
-		for indicie in self.indicies:
-			faces.append([indicie.l1, indicie.l2, indicie.l3])
-		return faces
-		
-	def getObj(self, name_prefix="group_", v_index_start=0, normals=True, uv=True, material=None):
-		obj = "o %s\n" % self.getGroupName(name_prefix)
-		verts = ""
-		norms = ""
-		mat = ""
-		uvs = ""
-		faces = ""
-		
-		if material != None:
-			mat += "usemtl %s\n" % material
-			mat += "s 1\n"
-		
-		for vertice in self.vertices:
-			verts += "v %f %f %f\n" % (vertice.x, vertice.y, vertice.z)
-			if normals:
-				norms += "vn %f %f %f\n" % (vertice.normal.x, vertice.normal.y, vertice.normal.z)
-			if uv:
-				uvs += "vt %f %f 0.0\n" % (vertice.u, vertice.v)
-		
-		for indicie in self.indicies:
-			l1 = indicie.l1 + v_index_start
-			l2 = indicie.l2 + v_index_start
-			l3 = indicie.l3 + v_index_start
-		
-			if normals and uv:
-				faces += "f %d/%d/%d %d/%d/%d %d/%d/%d\n" % (l1,l1,l1,l2,l2,l2,l3,l3,l3)
-			elif not normals and not uv:
-				faces += "f %d %d %d\n" % (l1,l2,l3)
-			elif normals and not uv:
-				faces += "f %d//%d %d//%d %d//%d\n" % (l1,l1,l2,l2,l3,l3)
-			elif not normals and uv:
-				faces += "f %d/%d %d/%d %d/%d\n" % (l1,l1,l2,l2,l3,l3)
-				
-		return obj + verts + norms + uvs + mat + faces
-	
-	def getGroupName(self, prefix="group_"):
-		return prefix + str(self.id)
-	
-	def getMtlName(self, prefix="material_"):
-		return prefix + str(self.id)
-	
-	def getMtl(self, name_prefix="material_"):
-		mtlc = ""
-		mtlc += "\r\nnewmtl %s\n" % self.getMtlName(name_prefix)
-		mtlc += "\tNs 20.0\n"
-		mtlc += "\tNi 1.0000\n"
-		mtlc += "\td 1.0000\n"
-		mtlc += "\tTr 1.0000\n"
-		mtlc += "\tTf 1.0000 1.0000 1.0000\n"
-		mtlc += "\tillum 1\n"
-		mtlc += "\tKa 0.2 0.2 0.2\n"
-		mtlc += "\tKd 0.3 0.3 0.3\n"
-		mtlc += "\tKs 0.4 0.4 0.4\n"
-		mtlc += "\tKe 0.0 0.0 0.0\n"
-		if self.material.diffuseMap:
-			mtlc += "\tmap_Kd %s\n" % self.material.diffuseMap
-			
-		return mtlc
-
-
 class Material:
+	shader = None
+	collisionFlags = None
+	materialKind = None
+	identifier = None
+	
 	diffuseMap = None
 	diffuseMap2 = None
 	doubleSided = None
 	specularMap = None
 	alphaReference = None
 	normalMap = None
-	ident = None
-	
-class Indicie:
-	l1 = None
-	l2 = None
-	l3 = None
-	
-	def __init__(self,l1,l2,l3):
-		self.l1 = l1
-		self.l2 = l2
-		self.l3 = l3
-	
-class Normal:
-	packed = None
-	x = None
-	y = None
-	z = None
-	
-	def __init__(self, packed = None):
-		if packed != None:
-			self.packed = packed
-			pkz = (long(packed) >> 16) & 0xFF
-			pky = (long(packed) >> 8) & 0xFF
-			pkx = (long(packed)) & 0xFF
-			
-			"""z = pkz >> 16
-			y = pky >> 8
-			x = pkx"""
-			
-			x = pkx
-			y = pky
-			z = pkz
-			
-			if x > 0x7F:
-				x = - (x - 0x7F)
-			if y > 0x7F:
-				y = - (y - 0x7F)
-			if z > 0x7F:
-				z = - (z - 0x7F)
-			
-			self.x = float(x) / 0xFF
-			self.y = float(y) / 0xFF
-			self.z = float(z) / 0xFF
-	
+
 class Vertice:
+	position = None
 	normal = None
-	bn = None
+	uv = None
+	uv2 = None
+	index = None
+	index2 = None
+	weight = None
 	t = None
-	u = None
-	u2 = None
-	v = None
-	v2 = None
-	x = None
-	y = None
-	z = None
-	index_1 = 0
-	index_2 = 0
-	index_3 = 0
-	weight_1 = 0
-	weight_2 = 0
+	bn = None

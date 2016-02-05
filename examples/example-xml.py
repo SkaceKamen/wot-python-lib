@@ -18,5 +18,5 @@ reader.setCachePath("cache/")
 
 # Now read file from wot packages and print it
 with reader.open("spaces/05_prohorovka/space.settings", "rb") as f:
-	xmlr = wot.XmlUnpacker(f)
-	print ET.tostring(xmlr.read())
+	xmlr = wot.XmlUnpacker()
+	print ET.tostring(xmlr.read(f))
