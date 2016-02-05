@@ -44,8 +44,7 @@ class OBJModelWriter(ModelWriter):
 		
 		# Vertices offset kept for obejcts
 		offset = 0
-		max_vertice = 0
-		
+
 		# Export all render sets as separate obejcts
 		for rindex, render_set in enumerate(primitive.renderSets):
 			for gindex, group in enumerate(render_set.groups):				
@@ -56,7 +55,7 @@ class OBJModelWriter(ModelWriter):
 				
 				# Create material if requested
 				if self.material:
-					objc += "usemat %s\n" % material_name
+					objc += "usemtl %s\n" % material_name
 					mtlc += "newmtl %s\n" % material_name
 					
 					material = group.material
@@ -90,8 +89,6 @@ class OBJModelWriter(ModelWriter):
 					l2 = offset + group.indices[i + 1] + 1
 					l3 = offset + group.indices[i + 2] + 1
 					
-					max_vertice = max(l1, l2, l3, max_vertice)
-					
 					if format == 0:
 						objc += "f %d/%d/%d %d/%d/%d %d/%d/%d\n" % (l1, l1, l1, l2, l2, l2, l3, l3, l3)
 					elif format == 1:
@@ -102,9 +99,6 @@ class OBJModelWriter(ModelWriter):
 						objc += "f %d/%d %d/%d %d/%d\n" % (l1, l1, l2, l2, l3, l3)
 					
 				offset += len(group.vertices)
-		
-		print "vertices", offset
-		print "max_vertice", max_vertice
 		
 		# Compress if needed
 		if self.compress:

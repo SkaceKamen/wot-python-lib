@@ -1,0 +1,5 @@
+# Exported by wot-python-lib 2.0.0
+newmtl set_0_group_0_material
+map_Kd content/Buildings/bldEU_001_Town_house/bldEU_001_Town_house_G01.dds
+map_Ks content/Buildings/bldEU_001_Town_house/bldEU_001_Town_house_G01_SM.dds
+map_norm content/Buildings/bldEU_001_Town_house/bldEU_001_Town_house_G01_NM.dds

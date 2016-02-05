@@ -8,8 +8,14 @@ def unp(format, data):
 	return unpack(format, data)[0]
 
 class ModelReader:
-	def __init__(self):
-		pass
+	debug=False
+	
+	def __init__(self,debug=False):
+		self.debug = debug
+	
+	def out(self, text):
+		if self.debug:
+			print text
 	
 	def read(self, primitives_fh, visual_fh):
 		# Read visual file
@@ -28,7 +34,7 @@ class ModelReader:
 		# Position of section starts from 4
 		position = 4
 		
-		print "== SECTIONS"
+		self.out("== SECTIONS")
 		
 		# Read sections
 		sections = {}
@@ -58,7 +64,7 @@ class ModelReader:
 				'data': None
 			}
 			
-			print "%s\t%X\t%X" % (section_name, section["position"], section["size"])
+			self.out("%s\t%X\t%X" % (section_name, section["position"], section["size"]))
 			
 			sections[section_name] = section
 
@@ -110,8 +116,8 @@ class ModelReader:
 				v_from = groups[index]["startVertex"]
 				v_to = v_from + groups[index]["verticesCount"]
 				
-				print "group indices %d / %d (%d - %d)" % ((i_to - i_from), len(indices), i_from, i_to)
-				print "group vertices %d / %d (%d - %d)" % ((v_to - v_from), len(vertices), v_from, v_to)
+				self.out("group indices %d / %d (%d - %d)" % ((i_to - i_from), len(indices), i_from, i_to))
+				self.out("group vertices %d / %d (%d - %d)" % ((v_to - v_from), len(vertices), v_from, v_to))
 				
 				primitive_groups.append(PrimitiveGroup(
 					origin = origin,
@@ -162,7 +168,7 @@ class ModelReader:
 		return material
 	
 	def readVertices(self, data):
-		print "== VERTICES"
+		self.out("== VERTICES")
 		
 		vertices = []
 		
@@ -174,7 +180,7 @@ class ModelReader:
 			type = str(sss).split('\x00')[0]
 			count = unp("I", data.read(4))
 		
-			print "type", type, "count", count
+			self.out("type %s count %d" % (type, count))
 		
 			for i in range(count):
 				vertices.append(self.readVertice(data, type)) 
@@ -256,7 +262,7 @@ class ModelReader:
 			return (x,y,z)
 	
 	def readIndices(self, data):
-		print "== INDICES"
+		self.out("== INDICES")
 		
 		# Prepare informations
 		indices = []
@@ -277,7 +283,7 @@ class ModelReader:
 		count = unp("I", data.read(4))
 		groups_count = unp("I", data.read(4))
 		
-		print "groups", groups_count, "indices", count, "stride", stride, "type", type
+		self.out("groups %d indices %d stride %d type %s" % (groups_count, count, stride, type))
 		
 		# Read indices
 		for i in range(count):

@@ -1,6 +1,6 @@
 from PackageReader import PackageReader
 from XmlUnpacker import XmlUnpacker
-from ModelReader2 import ModelReader
+from ModelReader import ModelReader
 from ModelWriter import OBJModelWriter
 
 import xml.etree.ElementTree as ET
