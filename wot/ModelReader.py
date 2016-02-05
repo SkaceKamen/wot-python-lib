@@ -180,12 +180,24 @@ class ModelReader:
 			subtype = str(data.read(64)).split('\x00')[0]
 			count = unp("I", data.read(4))
 		
-		self.out("type %s subtype %s count %d" % (type, subtype, count))
+		self.out("type %s subtype %s count %d stride %d" % (type, subtype, count, self.getStride(type, subtype)))
 	
 		for i in range(count):
 			vertices.append(self.readVertice(data, type, subtype)) 
 		
 		return vertices
+	
+	def getStride(self, type, subtype):
+		stride = 24
+		
+		if subtype == "set3/xyznuviiiwwtbpc":
+			stride = 40
+		elif "xyznuviiiwwtb" in type:
+			stride = 37
+		elif "xyznuvpc" in type or "xyznuvtb" in type:
+			stride = 32
+		
+		return stride
 	
 	def readVertice(self, data, type, subtype):
 		vert = Vertice()
@@ -196,14 +208,7 @@ class ModelReader:
 		vert.uv = unpack("2f", data.read(8))
 		
 		# Decide correct type
-		stride = 24
-		
-		if subtype == "set3/xyznuviiiwwtbpc":
-			stride = 40
-		elif "xyznuviiiwwtb" in type:
-			stride = 37
-		elif "xyznuvpc" in type or "xyznuvtb" in type:
-			stide = 32
+		stride = self.getStride(type, subtype)
 		
 		"""
 		if ("xyznuvpc" in type and "set3" not in type) or "xyznuvtb" in type:

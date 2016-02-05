@@ -85,10 +85,19 @@ class OBJModelWriter(ModelWriter):
 					format = 3
 				
 				# Write indices
-				for i in range(0, len(group.indices) - 3, 3):
+				for i in range(0, len(group.indices) - 2, 3):
 					l1 = offset + group.indices[i] + 1
 					l2 = offset + group.indices[i + 1] + 1
 					l3 = offset + group.indices[i + 2] + 1
+					
+					"""
+					if group.indices[i] > len(group.vertices):
+						print "indice #%d is wrong (%d / %d)" % (i, group.indices[i], len(group.vertices))
+					if group.indices[i + 1] > len(group.vertices):
+						print "indice #%d is wrong (%d / %d)" % (i + 1, group.indices[i + 1], len(group.vertices))
+					if group.indices[i + 2] > len(group.vertices):
+						print "indice #%d is wrong (%d / %d)" % (i + 2, group.indices[i + 2], len(group.vertices))
+					"""
 					
 					if format == 0:
 						objc += "f %d/%d/%d %d/%d/%d %d/%d/%d\n" % (l1, l1, l1, l2, l2, l2, l3, l3, l3)
