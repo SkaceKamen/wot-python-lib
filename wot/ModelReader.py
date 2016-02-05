@@ -118,12 +118,12 @@ class ModelReader:
 				
 				self.out("group indices %d / %d (%d - %d)" % ((i_to - i_from), len(indices), i_from, i_to))
 				self.out("group vertices %d / %d (%d - %d)" % ((v_to - v_from), len(vertices), v_from, v_to))
-				
+
 				primitive_groups.append(PrimitiveGroup(
 					origin = origin,
 					material = material,
 					vertices = vertices[v_from:v_to],
-					indices = indices[i_from:i_to]
+					indices = [ v - groups[index]["startVertex"] for v in indices[i_from:i_to] ]
 				))
 			
 			# Save render set
@@ -175,6 +175,7 @@ class ModelReader:
 		type = str(data.read(64)).split('\x00')[0]
 		subtype = None
 		count = unp("I", data.read(4))
+		
 		if "BPVT" in type:
 			subtype = str(data.read(64)).split('\x00')[0]
 			count = unp("I", data.read(4))
