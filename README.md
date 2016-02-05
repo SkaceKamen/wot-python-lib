@@ -44,49 +44,60 @@ Enables you to read wot models
 ##### read(primitives_fh, visual_fh)
     primitives_fh - file handle of primitives file
     visual_fh     - file handle of associated visual file
-Reads visual model. Returns Model
+Reads visual model. Returns Primitive
 
-## Model
-Contains data about wot model
+## Primitive
+Contains data about wot model. Refer to ModelWriter for more informations
 
-##### getObjMtl(name_prefix="", v_index_start=0, normals=True, uv=True, materials=False):
-    name_prefix   - prefix to be used in names
-    v_index_start - from what vertice should export start
-    normals       - export normals
-    ui            - export uv
-    materials     - include materials
-Returns dict with obj and mtl contents ({obj: '..', mtl: '..'})
+##### RenderSet[] renderSets
+Contains render sets, which then contains primitive groups.
 
-##### getObj(name_prefix="", v_index_start=0, normals=True, uv=True, materials=False):
-    name_prefix   - prefix to be used in names
-    v_index_start - from what vertice should export start
-    normals       - export normals
-    ui            - export uv
-    materials     - include materials reference
-Returns obj file contents
+##### float[[],[]] boundingBox
+Contains model bounding box in following format [[min_x, min_y, min_z], [max_x, max_y, max_z]]
 
-##### getMtl(name_prefix="")
-    name_prefix - prefix to be used in names
-Returns mtl file contents
+##### dict nodes
+Contains nodes and their transforms. Those nodes are used for positions of stuff... not for model
 
-##### getVericesCount()
-Returns sum of vertices
+## RenderSet
+Contains data about one render set
 
-## ModelGroup
-Contains vertice group data
+##### string[] nodes
+Nodes used in this render set. Purpose unknown.
 
-##### getFaces()
-Returns list of object faces
+##### PrimitiveGroup[] groups
+Contains primitive groups data
 
-##### getObj(name_prefix="group_", v_index_start=0, normals=True, uv=True, material=None)
-    name_prefix   - prefix to be used in names
-    v_index_start - from what vertice should export start
-    normals       - export normals
-    ui            - export uv
-    material      - material name
-Returns obj file contents
+## PrimitiveGroup
+Contains raw group data
 
-#### getMtl(name_prefix="material_")
-    name_prefix - prefix to be used in names
-Returns mtl file contents
+##### float[] origin
 
+##### Material material
+Group material
+
+##### Vertice[] vertices
+Group vertices
+
+##### int[] indices
+Group indices, 3 indices = one triangle
+
+## OBJModelWriter
+
+##### write(primitive, filename, filename_material=None)
+Exports primitive to OBJ (and mtl if set)
+
+##### bool material
+export material
+
+##### bool normals
+export normals
+##### bool uv
+export uv
+##### bool compress
+compress result obj and mtl using zlib
+
+##### string textureBase
+textures root used in mlt
+
+##### callable textureCallback
+Receives params: (texture_path, texture_type). Returns new texture_path used in mtl. This callback overrides the textureBase prop
