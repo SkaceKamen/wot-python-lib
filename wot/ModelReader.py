@@ -1,3 +1,9 @@
+"""
+Thanks Coffee_ for discovering the primitives format
+and writing original script that did the unpacking. This is
+just rewritten script to python.
+"""
+
 from XmlUnpacker import XmlUnpacker
 import xml.etree.ElementTree as ET
 from struct import unpack
