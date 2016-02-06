@@ -10,29 +10,51 @@ class OBJModelWriter(ModelWriter):
 	normals = False
 	uv = False
 	
+	scale = None
+	
 	textureBase = ""
 	textureCallback = None
 	
 	compress = False
 	
-	def __init__(self, material=False, normals=False, uv=False, textureBase="", textureCallback=None, compress=False):
+	def __init__(self, material=False, normals=False, uv=False, textureBase="", textureCallback=None, compress=False, scale=None):
 		self.material = material
 		self.normals = normals
 		self.uv = uv
 		self.textureBase = textureBase
 		self.textureCallback = textureCallback
 		self.compress = compress
+		self.scale = scale
 	
 	def baseTextureCallback(self, texture, type):
 		return self.textureBase + texture
 	
+	def multiply(self, vec1, vec2):
+		tpl = False
+		if isinstance(vec1, tuple):
+			vec1 = list(vec1)
+			tpl = True
+			
+		for i in range(len(vec1)):
+			vec1[i] *= vec2[i]
+		
+		if tpl:
+			vec1 = tuple(vec1)
+		
+		return vec1
+			
 	def write(self, primitive, filename, filename_material=None):
 		objc = "# Exported by wot-python-lib 2.0.0\n"
 		mtlc = objc
 		
-		# Reset texture callback if needed
-		if self.textureCallback is None:
-			self.textureCallback = self.baseTextureCallback
+		# Load basic options and use default values if required
+		textureCallback = self.textureCallback
+		scale = self.scale
+
+		if textureCallback is None:
+			textureCallback = self.baseTextureCallback
+		if scale is None:
+			scale = (1,1,1)
 		
 		# Guess mtl name if needed
 		if filename_material is None:
@@ -61,17 +83,17 @@ class OBJModelWriter(ModelWriter):
 					mtlc += "newmtl %s\n" % material_name
 					
 					if material.diffuseMap:
-						mtlc += "map_Kd %s\n" % self.textureCallback(material.diffuseMap, "diffuseMap")
+						mtlc += "map_Kd %s\n" % textureCallback(material.diffuseMap, "diffuseMap")
 					if material.specularMap:
-						mtlc += "map_Ks %s\n" % self.textureCallback(material.specularMap, "specularMap")
+						mtlc += "map_Ks %s\n" % textureCallback(material.specularMap, "specularMap")
 					if material.normalMap:
-						mtlc += "map_norm %s\n" % self.textureCallback(material.normalMap, "normalMap")
+						mtlc += "map_norm %s\n" % textureCallback(material.normalMap, "normalMap")
 				
 				# Add group vertices
 				for vertex in group.vertices:
-					objc += "v %f %f %f\n" % vertex.position
+					objc += "v %f %f %f\n" % self.multiply(vertex.position, scale)
 					if self.normals:
-						objc += "vn %f %f %f\n" % vertex.normal
+						objc += "vn %f %f %f\n" % self.multiply(vertex.normal, scale)
 					if self.uv:
 						objc += "vt %f %f\n" % (vertex.uv[0], -vertex.uv[1])
 				
