@@ -1,6 +1,9 @@
 # wot-python-lib
 Library for working with world of tanks resources.
 
+## Credits
+Thanks Coffee_ for doing most of the hard work. I just rewritten his scripts to python.
+
 ## PackageReader
 Allows you to extract file from wot packages without knowing in which package file actually is.
 You can cache package index for faster use.
